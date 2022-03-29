@@ -15,24 +15,38 @@ soup = BeautifulSoup(r.content, 'lxml')
 for a in soup.find_all(only_a_tags, href=True):
     a['href']
 
+class Drainer:
+    def __init__(self, q):
+        self.q = q
+    def __iter__(self):
+        while True:
+            try:
+                yield self.q.get_nowait()
+            except queue.Empty:
+                break
 
 class Pool:
     def __init__(self, max_workers, job) -> None:
         self.workers = max_workers
         self.job = job
 
-    def form_new_tasks(self):
-        pass
+    def form_new_tasks(self, links):
+        for link in links:
+            self.job.append(link)
     
     def run(self):
-        while
+        flag = 2
+        while flag > 0:
+            with ThreadPoolExecutor(max_workers=self.workers) as executor:
+                gen = executor.map(Parser, self.job)
+            for g in gen:
+                self.form_new_tasks(g.result)
 
 class Parser:
 
     def __init__(self, name, url) -> None:
         self.name = name
         self.url = url
-        return self._parse()
     
     def _connect(self, url: str = None,):
         while True:
@@ -51,7 +65,7 @@ class Parser:
                 break
         return response 
 
-    def _parse(self):
+    def parse(self):
         response = self._connect(self.url)
         if response.status_code == 200:
             next_gen = []
@@ -59,9 +73,13 @@ class Parser:
             soup = BeautifulSoup(response.content, 'lxml')
             for a in soup.find_all(only_a_tags, href=True):
                 link = a['href']
-                if link not in Q:
+                if link not in Drainer(Q):
                     Q.put(link)
                     next_gen.append(link)
             return next_gen        
 
         return ()
+
+parser = Parser('edu', 'https://google.com/')
+print(parser.parse())
+print()
