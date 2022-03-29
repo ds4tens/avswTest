@@ -8,28 +8,37 @@ from requests import  exceptions
 from time import sleep
 
 # TODO перекинуть общий список и base url в классы
-Q = []
-BASE_URL = 'https://google.com'
+
 
 
 class Urls:
+
+    BASE_URL = None
+    VISITED = []
+
+    """ Класс представляет из себя подобие дерева, где хранятся потомоки и наследники"""
     def __init__(self, parent_url, work_url, depth) -> None:
         self.parent_url = parent_url
         self.work_url = work_url
         self.depth = depth
         self.child_urls = []
         self.status = False
+    
+    @classmethod
+    def set_base_url(self, url):
+        self.BASE_URL = url
+    
 
 class Pool:
 
-    MAX_DEPTH = 2
-
-    def __init__(self, max_workers, URL) -> None:
+    def __init__(self, max_workers, task, max_depth) -> None:
         self.workers = max_workers
-        self.job = queue.SimpleQueue()
-        self.job.put(URL)
+        self.job = queue.SimpleQueue() # реализована "защита" от гонки потоков
+        self.job.put(task)
+        self._MAX_DEPTH = max_depth
 
     def _form_new_tasks(self, url_obj):
+        """ Формирование заданий для следующей глубины """
         if not url_obj.status:
             self.job.put(url_obj.work_url)
         else:
@@ -38,7 +47,8 @@ class Pool:
                 
     
     def run(self):
-        for _ in range(self.MAX_DEPTH):     
+        """ Функция создает пул потоков и запускает его, если есть задания и не достигнута макс. глубина """
+        for _ in range(self._MAX_DEPTH):     
             with ThreadPoolExecutor(max_workers=self.workers) as executor:
                 futures = []
                 sentinel = object()
@@ -59,16 +69,19 @@ class Pool:
         print(self.job.qsize())
 
 class Parser:
-
+    """ Класс парсинга сайта"""
     def __init__(self, url: object, name='thr') -> None:
         self.name = name
         self.url = url.work_url
         self.url_obj = url
-        
 
-    @staticmethod
-    def _connect(url):
-        print(url)
+    def _connect(self, url):
+        """ 
+        Функция обрабатывает запросы 
+        И возвращает ответ
+        """
+        # logging нужен
+
         while True:
             response = None
             try:
@@ -77,18 +90,36 @@ class Parser:
                 print('Ooops... Невозможно подключиться к {}'.format(url))
                 sleep(15)
             except exceptions.TooManyRedirects:
-                print('Ooops... Слишком много запросов от {}'.format(url))
+                print('Ooops... Слишком много запросов к {}'.format(url))
                 sleep(300)
             except exceptions.Timeout:
+                """
+                Для некоторых ссылок google кидает постоянный timeout_error , поэтому нет смысла совершать повторный запрос
+                А лучше выйти из цикла
+                """
                 print("Ooops.. превышено время ответа от {}".format(url))
                 break
             except exceptions.MissingSchema:
-                url = BASE_URL + url
+                #print(f'url={url} base_url={self.url_obj.BASE_URL}')
+                url = self.url_obj.BASE_URL + url
+                #print(f'end = {url}')
+            except exceptions.InvalidSchema:
+                break
             else:
                 break
             
         return response 
-        
+    @staticmethod  
+    def _valid(link):
+        if len(link) < 1:
+            return False
+        if link[0] == '#':
+            return False
+        while link[0] == '.':
+            link = link[1:]
+        if link[0] not in('.', '/', '#', 'h'):
+            link = '/'+link
+        return link
 
     def parse(self):
         response = self._connect(self.url)
@@ -100,21 +131,37 @@ class Parser:
                 try:
                     link = a['href']
                 except KeyError:
-                    next
+                    continue
+
+                link = self._valid(link)
+                if not link:
+                    continue
 
                 lock = threading.Lock()
                 lock.acquire()
-                if link not in Q:
-                    Q.append(link)
+                if link not in self.url_obj.VISITED:
+                    self.url_obj.VISITED.append(link)
                     next_gen.append(link)
                 lock.release()
+
             self.url_obj.child_urls = next_gen
 
         self.url_obj.status = True                   
         return self.url_obj
 
 
-lst = Urls(None ,'https://www.google.ru/imghp?hl=ru&tab=wi', 0)
-pool = Pool(2, lst)
+class MakeResult:
+
+    def __init__(self) -> None:
+        pass
+
+    def make_csv(self, url, time, url_counter):
+        pass
+    
+    def send_to_db():
+        pass
+
+u = Urls(None, 'https://google.com/', 0)
+u.set_base_url('https://google.com')
+pool = Pool(10, u, 3)
 pool.run()
-print(Q)
