@@ -1,5 +1,5 @@
 import logging
-from utils import Parser, Pool, Urls
+from utils import Pool, Urls
 import sys
 
 
